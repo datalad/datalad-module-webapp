@@ -11,9 +11,9 @@ cherrypy.tools.verify_datalad_hostsecret = cherrypy.Tool(
 
 
 class MetadataAppExample(object):
-    _webapp_dir = dirname(__file__)
-    _webapp_staticdir = 'static'
-    _webapp_config = opj(_webapp_dir, 'app.conf')
+    _webapp_component_dir = dirname(__file__)
+    _webapp_component_staticdir = 'static'
+    _webapp_component_config = opj(_webapp_component_dir, 'app.conf')
 
     def __init__(self, dataset):
         from datalad.distribution.dataset import require_dataset
