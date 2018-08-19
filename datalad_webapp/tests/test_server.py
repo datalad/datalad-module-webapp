@@ -18,8 +18,8 @@ class SimpleCPTest(helper.CPWebCase):
 
     def test_server_ok(self):
         # by default the beast is locked
-        self.getPage("/")
-        self.assertStatus('401 Unauthorized')
         # unlock by visiting / with the correct secret
-        self.getPage("/?datalad_host_secret=dataladtest")
+        self.getPage("/core/authenticate?datalad_host_secret=dataladtest")
         self.assertStatus('200 OK')
+        self.getPage("/core/authenticate?datalad_host_secret=wrong")
+        self.assertStatus('401 Unauthorized')

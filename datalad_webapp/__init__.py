@@ -13,8 +13,7 @@ __docformat__ = 'restructuredtext'
 import logging
 import uuid
 
-from os.path import isdir
-from os.path import join as opj
+import os.path as op
 
 from pkg_resources import iter_entry_points
 
@@ -42,16 +41,6 @@ command_suite = (
 lgr = logging.getLogger('datalad.extension.webapp')
 
 
-def verify_host_secret():
-    import cherrypy
-    session_host_secret = cherrypy.session.get('datalad_host_secret', None)
-    system_host_secret = cherrypy.config.get('datalad_host_secret', None)
-    if not session_host_secret == system_host_secret:
-        raise cherrypy.HTTPError(
-            401,
-            'Unauthorized session, please visit the URL shown at webapp startup')
-
-
 @build_doc
 class WebApp(Interface):
     """
@@ -60,8 +49,7 @@ class WebApp(Interface):
         components=Parameter(
             args=('--components',),
             doc="yeah!",
-            nargs='+',
-            action='append'),
+            nargs='+'),
         dataset=Parameter(
             args=("-d", "--dataset"),
             doc="""specify the dataset to serve as the anchor of the webapp.
@@ -93,11 +81,12 @@ class WebApp(Interface):
         comps = assure_list(components)
         if not comps:
             raise ValueError('no component specification given')
-        if not isinstance(comps[0], (list, tuple)):
-            comps = [comps]
-        comps = {a[0] if isinstance(a, (list, tuple)) else a:
-                a[1] if isinstance(a, (list, tuple)) and len(a) > 1 else None
-                for a in comps}
+        if 'core' not in comps:
+            comps.append('core')
+
+        from datalad.distribution.dataset import require_dataset
+        dataset = require_dataset(
+            dataset, check_installed=True, purpose='serving')
 
         import cherrypy
 
@@ -146,7 +135,8 @@ class WebApp(Interface):
             lgr.debug("Available webapp component '%s'", ep.name)
             if ep.name not in comps:
                 continue
-            mount = comps[ep.name] if comps[ep.name] else '/'
+            # TODO sanitize name for URL
+            mount = '/{}'.format(ep.name)
             # get the webapp component class
             lgr.debug("Load webapp component spec")
             cls = ep.load()
@@ -160,6 +150,8 @@ class WebApp(Interface):
                 script_name=mount,
                 # comp config file, it is ok for that file to not exist
                 config=cls._webapp_component_config
+                if cls._webapp_component_config
+                and op.exists(cls._webapp_component_config) else None
             )
             # forcefully impose more secure mode
             # TODO might need one (or more) switch(es) to turn things off for
@@ -177,8 +169,8 @@ class WebApp(Interface):
                     #'tools.sessions.secure': True,
                     'tools.sessions.httponly': True
                     }})
-            static_dir = opj(cls._webapp_component_dir, cls._webapp_component_staticdir)
-            if isdir(static_dir):
+            static_dir = op.join(cls._webapp_component_dir, cls._webapp_component_staticdir)
+            if op.isdir(static_dir):
                 comp.merge({
                     # the key has to be / even when a comp is mount somewhere
                     # below
@@ -201,7 +193,7 @@ class WebApp(Interface):
         lgr.info('Host secret is: %s', cherrypy.config['datalad_host_secret'])
         cherrypy.engine.start()
         lgr.info(
-            'Access authenticated webapp session at: http://%s:%i?datalad_host_secret=%s',
+            'Access authenticated webapp session at: http://%s:%i/core/authenticate?datalad_host_secret=%s',
             *cherrypy.server.bound_addr + (cherrypy.config['datalad_host_secret'],))
         cherrypy.engine.block()
         yield {}
