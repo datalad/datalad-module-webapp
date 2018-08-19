@@ -1,8 +1,6 @@
 import os.path as op
 
 import cherrypy
-from cherrypy import tools
-
 from datalad_webapp.component import Component
 
 
@@ -25,7 +23,7 @@ class MetadataAppExample(Component):
 
     @cherrypy.expose
     @cherrypy.tools.datalad_verify_authentication()
-    @tools.json_out()
+    @cherrypy.tools.json_out()
     def m(self, path):
         from datalad.api import metadata
         return metadata(path, dataset=self.ds, result_renderer='disabled')
