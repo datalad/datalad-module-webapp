@@ -9,6 +9,7 @@ class HostSecretComponent(Component):
     _webapp_component_dir = op.dirname(__file__)
     _webapp_component_config = op.join(_webapp_component_dir, 'component.conf')
 
+    @staticmethod
     def verify_authentication():
         session_host_secret = cherrypy.session.get('datalad_host_secret', None)
         system_host_secret = cherrypy.config.get('datalad_host_secret', None)
