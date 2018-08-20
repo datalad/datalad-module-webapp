@@ -9,7 +9,7 @@ class SimpleCPTest(helper.CPWebCase):
     def setup_server(path):
         ds = create(path)
         ds.config.set(
-            'datalad.webapp.auth.hostsecret.secret',
+            'datalad.webapp.hostsecret.secret',
             'dataladtest',
             where='dataset')
         webapp(
@@ -23,7 +23,7 @@ class SimpleCPTest(helper.CPWebCase):
     def test_server_ok(self):
         # by default the beast is locked
         # unlock by visiting / with the correct secret
-        self.getPage("/auth/hostsecret/signin?secret=dataladtest")
+        self.getPage("/hostsecret/signin?secret=dataladtest")
         self.assertStatus('200 OK')
-        self.getPage("/auth/hostsecret/signin?secret=wrong")
+        self.getPage("/hostsecret/signin?secret=wrong")
         self.assertStatus('401 Unauthorized')

@@ -28,7 +28,7 @@ setup(
             # the label in front of '=' is the webapp component name
             # the entrypoint can point to any symbol of any name, as long it is
             # valid datalad interface specification
-            'auth.hostsecret=datalad_webapp.auth.hostsecret:HostSecretComponent',
+            'hostsecret=datalad_webapp.auth.hostsecret:HostSecretComponent',
             'example_metadata=datalad_webapp.examples.metadata:MetadataAppExample',
         ]
     },

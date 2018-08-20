@@ -94,7 +94,7 @@ class WebApp(Interface):
 
         if auth:
             # make sure the auth component is loaded
-            comps.insert(0, 'auth.{}'.format(auth))
+            comps.insert(0, auth)
 
         from datalad.distribution.dataset import require_dataset
         dataset = require_dataset(
@@ -145,7 +145,7 @@ class WebApp(Interface):
             # fire up the webapp component instance
             lgr.debug("Instantiate webapp component")
             inst = cls(**dict(dataset=dataset))
-            if ep.name == 'auth.{}'.format(auth):
+            if ep.name == auth:
                 WebApp._auth_component = inst
             # mount under global URL tree (default or given suburl)
             lgr.debug("Mount webapp component '%s' at '%s'", inst, mount)

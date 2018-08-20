@@ -22,9 +22,8 @@ class HostSecretComponent(Component):
         super(HostSecretComponent, self).__init__(dataset=dataset)
 
         hostsecret = self.ds.config.get(
-            'datalad.webapp.auth.hostsecret.secret',
+            'datalad.webapp.hostsecret.secret',
             None)
-        print('CFGSECRET', hostsecret)
         if hostsecret is None:
             hostsecret = uuid.uuid4()
             # little dance for python compat
@@ -42,5 +41,5 @@ class HostSecretComponent(Component):
         HostSecretComponent.verify_authentication()
 
     def get_signin(self):
-        return '/auth/hostsecret/signin?secret={}'.format(
+        return '/hostsecret/signin?secret={}'.format(
             cherrypy.config['datalad_host_secret'])
