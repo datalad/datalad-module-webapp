@@ -24,11 +24,12 @@ setup(
             'webapp=datalad_webapp:command_suite',
         ],
         # 'datalad.webapps' is THE entrypoint inspected by the datalad webapp command
-        'datalad.webapps': [
-            # the label in front of '=' is the webapp name
+        'datalad.webapp.components': [
+            # the label in front of '=' is the webapp component name
             # the entrypoint can point to any symbol of any name, as long it is
             # valid datalad interface specification
-            'example_metadata=datalad_webapp.examples.metadata.app:MetadataAppExample',
+            'hostsecret=datalad_webapp.auth.hostsecret:HostSecretComponent',
+            'example_metadata=datalad_webapp.examples.metadata:MetadataAppExample',
         ]
     },
 )

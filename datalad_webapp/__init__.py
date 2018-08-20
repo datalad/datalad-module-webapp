@@ -11,10 +11,10 @@
 __docformat__ = 'restructuredtext'
 
 import logging
-import uuid
 
-from os.path import isdir
-from os.path import join as opj
+import cherrypy
+
+import os.path as op
 
 from pkg_resources import iter_entry_points
 
@@ -42,26 +42,15 @@ command_suite = (
 lgr = logging.getLogger('datalad.extension.webapp')
 
 
-def verify_host_secret():
-    import cherrypy
-    session_host_secret = cherrypy.session.get('datalad_host_secret', None)
-    system_host_secret = cherrypy.config.get('datalad_host_secret', None)
-    if not session_host_secret == system_host_secret:
-        raise cherrypy.HTTPError(
-            401,
-            'Unauthorized session, please visit the URL shown at webapp startup')
-
-
 @build_doc
 class WebApp(Interface):
     """
     """
     _params_ = dict(
-        app=Parameter(
-            args=('--app',),
+        components=Parameter(
+            args=('--components',),
             doc="yeah!",
-            nargs='+',
-            action='append'),
+            nargs='+'),
         dataset=Parameter(
             args=("-d", "--dataset"),
             doc="""specify the dataset to serve as the anchor of the webapp.
@@ -75,8 +64,9 @@ class WebApp(Interface):
             doc="""Execution mode: regular foreground process (normal);
             background process (daemon); no server is started, but all
             configuration is perform (dry-run)"""),
-        hostsecret=Parameter(
-            args=("--hostsecret",),
+        auth=Parameter(
+            args=("--auth",),
+            constraints=EnsureChoice(None, 'hostsecret'),
             doc="""Secret string that COULD be used by webapps to authenticate
             client sessions. This is not a replacement of a proper
             authentication or encryption setup. It is merely useful for
@@ -86,35 +76,36 @@ class WebApp(Interface):
             is generated."""),
     )
 
+    _auth_component = None
+
+    def verify_authentication():
+        if WebApp._auth_component is None:
+            return
+        else:
+            return WebApp._auth_component.verify_authentication()
+
     @staticmethod
     @datasetmethod(name='webapp')
     @eval_results
-    def __call__(app, dataset=None, mode='normal', hostsecret=None):
-        apps = assure_list(app)
-        if not apps:
-            raise ValueError('no app specification given')
-        if not isinstance(apps[0], (list, tuple)):
-            apps = [apps]
-        apps = {a[0] if isinstance(a, (list, tuple)) else a:
-                a[1] if isinstance(a, (list, tuple)) and len(a) > 1 else None
-                for a in apps}
+    def __call__(components, dataset=None, mode='normal', auth=None):
+        comps = assure_list(components)
+        if not comps:
+            raise ValueError('no component specification given')
 
-        import cherrypy
+        if auth:
+            # make sure the auth component is loaded
+            comps.insert(0, auth)
 
-        if hostsecret is None:
-            hostsecret = uuid.uuid4()
-            # little dance for python compat
-            if hasattr(hostsecret, 'get_hex'):
-                hostsecret = hostsecret.get_hex()
-            else:
-                hostsecret = hostsecret.hex
+        from datalad.distribution.dataset import require_dataset
+        dataset = require_dataset(
+            dataset, check_installed=True, purpose='serving')
+
         # global config
         cherrypy.config.update({
             # prevent visible tracebacks, etc:
             # http://docs.cherrypy.org/en/latest/config.html#id14
             #'environment': 'production',
             #'log.error_file': 'site.log',
-            'datalad_host_secret': hostsecret,
         })
 
         # set the priority according to your needs if you are hooking something
@@ -141,31 +132,36 @@ class WebApp(Interface):
         # when running on a priviledged port
         #DropPrivileges(cherrypy.engine, uid=1000, gid=1000).subscribe()
 
-        enabled_apps = []
-        for ep in iter_entry_points('datalad.webapps'):
-            lgr.debug("Available webapp '%s'", ep.name)
-            if ep.name not in apps:
+        enabled_comps = []
+        for ep in iter_entry_points('datalad.webapp.components'):
+            lgr.debug("Available webapp component '%s'", ep.name)
+            if ep.name not in comps:
                 continue
-            mount = apps[ep.name] if apps[ep.name] else '/'
-            # get the webapp class
-            lgr.debug("Load webapp spec")
+            # TODO sanitize name for URL
+            mount = '/{}'.format(ep.name.replace('.', '/'))
+            # get the webapp component class
+            lgr.debug("Load webapp component spec")
             cls = ep.load()
-            # fire up the webapp instance
-            lgr.debug("Instantiate webapp")
+            # fire up the webapp component instance
+            lgr.debug("Instantiate webapp component")
             inst = cls(**dict(dataset=dataset))
+            if ep.name == auth:
+                WebApp._auth_component = inst
             # mount under global URL tree (default or given suburl)
-            lgr.debug("Mount webapp '%s' at '%s'", inst, mount)
-            app = cherrypy.tree.mount(
+            lgr.debug("Mount webapp component '%s' at '%s'", inst, mount)
+            comp = cherrypy.tree.mount(
                 root=inst,
                 script_name=mount,
-                # app config file, it is ok for that file to not exist
-                config=cls._webapp_config
+                # comp config file, it is ok for that file to not exist
+                config=cls._webapp_component_config
+                if cls._webapp_component_config and
+                op.exists(cls._webapp_component_config) else None
             )
             # forcefully impose more secure mode
             # TODO might need one (or more) switch(es) to turn things off for
             # particular scenarios
-            enabled_apps.append(ep.name)
-            app.merge({
+            enabled_comps.append(ep.name)
+            comp.merge({
                 '/': {
                     # turns all security headers on
                     'tools.secureheaders.on': True,
@@ -176,32 +172,41 @@ class WebApp(Interface):
                     # enable SSL in the server
                     #'tools.sessions.secure': True,
                     'tools.sessions.httponly': True
-                    }})
-            static_dir = opj(cls._webapp_dir, cls._webapp_staticdir)
-            if isdir(static_dir):
-                app.merge({
-                    # the key has to be / even when an app is mount somewhere
+                }})
+            static_dir = op.join(
+                cls._webapp_component_dir,
+                cls._webapp_component_staticdir)
+            if op.isdir(static_dir):
+                comp.merge({
+                    # the key has to be / even when a comp is mount somewhere
                     # below
                     '/': {
                         'tools.staticdir.on': True,
-                        'tools.staticdir.root': cls._webapp_dir,
-                        'tools.staticdir.dir': cls._webapp_staticdir}}
+                        'tools.staticdir.root': cls._webapp_component_dir,
+                        'tools.staticdir.dir': cls._webapp_component_staticdir}}
                 )
-        failed_apps = set(apps).difference(enabled_apps)
-        for failed_app in failed_apps:
+        failed_comps = set(comps).difference(enabled_comps)
+        for failed_comp in failed_comps:
             yield dict(
                 action='webapp',
                 status='error',
                 path=dataset,
-                message=('Failed to load webapp: %s', failed_app))
-        if not enabled_apps:
+                message=('Failed to load webapp component: %s', failed_comp))
+        if not enabled_comps:
             return
         if mode == 'dry-run':
             return
-        lgr.info('Host secret is: %s', cherrypy.config['datalad_host_secret'])
         cherrypy.engine.start()
         lgr.info(
-            'Access authenticated webapp session at: http://%s:%i?datalad_host_secret=%s',
-            *cherrypy.server.bound_addr + (cherrypy.config['datalad_host_secret'],))
+            'Access authenticated webapp session at: http://%s:%i%s',
+            *cherrypy.server.bound_addr +
+            (WebApp._auth_component.get_signin()
+             if WebApp._auth_component else '',))
         cherrypy.engine.block()
         yield {}
+
+
+# it is critical to register this here, as it is ued as a decorator in many components
+# and needs to be present before the get imported
+cherrypy.tools.datalad_verify_authentication = cherrypy.Tool(
+    'before_handler', WebApp.verify_authentication)
