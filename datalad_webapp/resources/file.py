@@ -136,7 +136,7 @@ class FileResource(WebAppResource):
                 json_py.loads(args.content), file_abspath)
         else:
             open(file_abspath, 'w').write(args.content)
-        self.ds.add(
+        self.ds.rev_save(
             file_abspath,
             to_git=args.togit,
             #message="",

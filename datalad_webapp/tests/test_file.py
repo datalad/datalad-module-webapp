@@ -51,7 +51,7 @@ def test_read(client):
         file_content = '{"three": 3}'
         # resource picks up live changes to the dataset
         create_tree(ds.path, {'subdir': {'dummy': file_content}})
-        ds.add('.')
+        ds.rev_save()
         current_files = c.get('/api/v1/file').get_json()['files']
         testpath = 'subdir/dummy'
         assert testpath not in existing_files
@@ -104,7 +104,7 @@ def test_delete(client):
         file_content = '{"three": 3}'
         # resource picks up live changes to the dataset
         create_tree(ds.path, {'subdir': {'dummy': file_content}})
-        ds.add('.')
+        ds.rev_save()
         assert testpath in c.get('/api/v1/file').get_json()['files']
 
         rq = c.delete(

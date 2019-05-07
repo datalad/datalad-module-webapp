@@ -30,7 +30,7 @@ def client(tmpdir):
         "This is a help message",
         where='dataset'
     )
-    ds.save(message="dummy procedure added")
+    ds.rev_save(message="dummy procedure added")
 
     res = webapp(
         dataset=ds.path,
